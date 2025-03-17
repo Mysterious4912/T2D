@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>T2D糖尿病风险预测</title>
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="gradient-bg">
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="prediction-card p-4 mb-4">
+                    <h2 class="text-center mb-4">🏥 T2D糖尿病风险预测系统</h2>
+                    <p class="text-muted text-center mb-4">请输入您的健康指标，系统将根据机器学习模型预测患病风险</p>
+
+                    <form id="predictionForm">
+                        <div id="formFields" class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">年龄</label>
+                                <input type="number" class="form-control" id="age" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">性别</label>
+                                <select class="form-select" id="sex" required>
+                                    <option value="">请选择</option>
+                                    <option value="0">女</option>
+                                    <option value="1">男</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">糖尿病家族史</label>
+                                <select class="form-select" id="his_dm" required>
+                                    <option value="">请选择</option>
+                                    <option value="0">无</option>
+                                    <option value="1">有</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">糖化血红蛋白(%)</label>
+                                <input type="number" step="0.1" class="form-control" id="glucose_hba1c" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">餐后半小时血糖(mmol/L)</label>
+                                <input type="number" step="0.1" class="form-control" id="glucose_ha" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">餐后两小时血糖(mmol/L)</label>
+                                <input type="number" step="0.1" class="form-control" id="glucose_fpg2h" required>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="submit" class="btn btn-primary btn-lg">立即评估</button>
+                        </div>
+                    </form>
+
+                    <div id="result" class="mt-4 text-center" style="display: none;">
+                        <h3 class="mb-3">评估结果</h3>
+                        <div class="alert alert-success" role="alert" id="resultText"></div>
+                        <p class="text-muted small">* 本结果基于XGBoost机器学习模型预测，仅供参考，具体诊断请咨询专业医生</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    async function loadDefaults() {
+        try {
+            const response = await fetch('/config');
+            const config = await response.json();
+            const fields = ['age', 'sex', 'his_dm', 'glucose_hba1c', 'glucose_ha', 'glucose_fpg2h'];
+
+            fields.forEach(field => {
+                const input = document.getElementById(field);
+                if (input && config.default_values[field] && !input.value) {
+                    input.value = config.default_values[field];
+                }
+            });
+        } catch (error) {
+            console.error('加载默认值失败:', error);
+        }
+    }
+
+    document.getElementById('predictionForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const formData = {
+            age: parseInt(document.getElementById('age').value),
+            sex: parseInt(document.getElementById('sex').value),
+            his_dm: parseInt(document.getElementById('his_dm').value),
+            glucose_hba1c: parseFloat(document.getElementById('glucose_hba1c').value),
+            glucose_ha: parseFloat(document.getElementById('glucose_ha').value),
+            glucose_fpg2h: parseFloat(document.getElementById('glucose_fpg2h').value)
+        };
+
+         try {
+            const response = await fetch('http://127.0.0.1:5001/predict', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(formData)
+            });
+
+            const result = await response.json();
+            const resultElement = document.getElementById('resultText');
+
+            // 根据风险等级设置颜色
+            if (result.risk_level === "高风险") {
+                resultElement.className = "alert alert-danger";  // 绿色
+            } else {
+                resultElement.className = "alert alert-success";   // 红色
+            }
+
+            resultElement.innerHTML = `您的糖尿病风险为：<strong>${result.risk_level}</strong> (概率：${(result.probability * 100).toFixed(1)}%)`;
+            document.getElementById('result').style.display = 'block';
+
+        } catch (error) {
+            const resultElement = document.getElementById('resultText');
+            resultElement.className = "alert alert-danger";      // 错误时红色
+            resultElement.innerHTML = `服务异常：${error.message}`;
+        }
+    });
+
+    window.onload = loadDefaults;
+    </script>
+</body>
+</html>
